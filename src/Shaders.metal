@@ -130,6 +130,47 @@ float get_pressure(
 	return pressure.read(uint2(x, y)).x;
 }
 
+kernel void simple_copy(
+    texture2d<float, access::read>  source [[texture(0)]],
+    texture2d<float, access::write> dest   [[texture(1)]],
+    uint2 gid [[thread_position_in_grid]])
+{
+    if (gid.x >= dest.get_width() || gid.y >= dest.get_height()) return;
+    dest.write(source.read(gid), gid);
+}
+
+kernel void scale_texture(
+    texture2d<float, access::sample> source [[texture(0)]],
+    texture2d<float, access::write>  dest   [[texture(1)]],
+    uint2 gid [[thread_position_in_grid]])
+{
+    if (gid.x >= dest.get_width() || gid.y >= dest.get_height()) return;
+
+    float sourceAspect = float(source.get_width()) / float(source.get_height());
+    float destAspect = float(dest.get_width()) / float(dest.get_height());
+
+    float2 uv = (float2(gid) + 0.5f) / float2(dest.get_width(), dest.get_height());
+    float2 sourceUV;
+
+    if (sourceAspect > destAspect) {
+        // Source is wider than dest: letterbox
+        float s = destAspect / sourceAspect;
+        sourceUV = float2(uv.x, (uv.y - 0.5) / s + 0.5);
+    } else {
+        // Source is taller than dest: pillarbox
+        float s = sourceAspect / destAspect;
+        sourceUV = float2((uv.x - 0.5) / s + 0.5, uv.y);
+    }
+
+    if (sourceUV.x < 0 || sourceUV.x > 1 || sourceUV.y < 0 || sourceUV.y > 1) {
+        dest.write(float4(0), gid);
+    } else {
+        // Flip Y because MTKTextureLoader/Metal coordinate mismatch
+        sourceUV.y = 1.0 - sourceUV.y;
+        dest.write(source.sample(linearSampler, sourceUV), gid);
+    }
+}
+
 kernel void inject_velocity(
     texture2d<float, access::read_write> velX     [[texture(0)]],
     texture2d<float, access::read_write> velY     [[texture(1)]],
@@ -171,14 +212,7 @@ kernel void inject_smoke(
     constant FrameData&    frame     [[buffer(1)]],
     uint2 gid [[thread_position_in_grid]])
 {
-    if (!frame.mouse.rightDown || frame.mouse.isSolidMode) return;
-    if (!in_bounds(gid, constants)) return;
-
-    float2 uv_c = get_uv_c(gid, constants);
-    float2 mouse_uv_c = c_uv(frame.mouse.pos, constants);
-    if (distance(uv_c, mouse_uv_c) <= constants.mouseRadius) {
-    	smoke.write(float4(1), gid);
-    }
+    // Right-click smoke injection removed.
 }
 
 kernel void inject_solids(

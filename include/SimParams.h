@@ -25,7 +25,6 @@ typedef struct {
     SimFloat2 pos;
     SimFloat2 delta;
     bool leftDown;
-    bool rightDown;
     bool isSolidMode;
     bool isPaused;
 } MouseState;

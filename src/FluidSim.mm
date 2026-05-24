@@ -1,9 +1,11 @@
 #import "../include/FluidSim.hpp"
 #import "../include/SimParams.h"
 #import <Metal/Metal.h>
+#import <MetalKit/MetalKit.h>
 
 @implementation FluidSim {
     id<MTLDevice> _device;
+    id<MTLCommandQueue> _commandQueue;
 
     // sim textures
     id<MTLTexture> _velX;
@@ -13,6 +15,7 @@
     id<MTLTexture> _pressure;
     id<MTLTexture> _smoke; // smokeMap analog from CPU version
     id<MTLTexture> _smokeTemp;
+    id<MTLTexture> _smokeInitial;
     id<MTLTexture> _solids;
     id<MTLTexture> _pressureSolveData;
 
@@ -27,6 +30,8 @@
     id<MTLComputePipelineState> _initSolidsPipeline;
     id<MTLComputePipelineState> _updateVelocitiesPipeline;
     id<MTLComputePipelineState> _precomputePressureDataPipeline;
+    id<MTLComputePipelineState> _scaleTexturePipeline;
+    id<MTLComputePipelineState> _copyTexturePipeline;
     // red black Gauss-Seidel
     id<MTLComputePipelineState> _gsRedPipeline;
     id<MTLComputePipelineState> _gsBlackPipeline;
@@ -45,6 +50,7 @@
     if (!self) return nil;
 
     _device = device;
+    _commandQueue = commandQueue;
     _width  = width;
     _height = height;
 
@@ -89,6 +95,7 @@
     smokeDesc.storageMode = MTLStorageModePrivate;
     _smoke     = [_device newTextureWithDescriptor:smokeDesc];
     _smokeTemp = [_device newTextureWithDescriptor:smokeDesc];
+    _smokeInitial = [_device newTextureWithDescriptor:smokeDesc];
 
     // solids uses R8Uint
     MTLTextureDescriptor *td = [[MTLTextureDescriptor alloc] init];
@@ -131,6 +138,8 @@
     _gsBlackPipeline          = [self makePipeline:library name:@"gs_black"];
     _updateVelocitiesPipeline = [self makePipeline:library name:@"update_velocities"];
     _precomputePressureDataPipeline = [self makePipeline:library name:@"precompute_pressure_data"];
+    _scaleTexturePipeline     = [self makePipeline:library name:@"scale_texture"];
+    _copyTexturePipeline      = [self makePipeline:library name:@"simple_copy"];
     _clearTexturesPipeline    = [self makePipeline:library name:@"clear_textures"];
     _initSolidsPipeline       = [self makePipeline:library name:@"init_solids"];
 }
@@ -142,7 +151,7 @@
     c.fluidDensity = 1.f;
     c.width        = _width;
     c.height       = _height;
-    c.mouseRadius = 0.08f;
+    c.mouseRadius = 0.03f;
     c.velocityStrength = 1.8f;
     c.weightSOR = 1.7f;
     _simConstantsBuffer = [_device newBufferWithBytes:&c
@@ -167,6 +176,16 @@
     MTLSize threadgroup = MTLSizeMake(16, 16, 1);
     [encoder dispatchThreads:grid threadsPerThreadgroup:threadgroup];
     [encoder memoryBarrierWithScope:MTLBarrierScopeTextures];
+}
+
+// Helper to perform a compute pass and wait for completion
+- (void)computePass:(void (^)(id<MTLComputeCommandEncoder> encoder))block {
+    id<MTLCommandBuffer> commandBuffer = [_commandQueue commandBuffer];
+    id<MTLComputeCommandEncoder> encoder = [commandBuffer computeCommandEncoder];
+    block(encoder);
+    [encoder endEncoding];
+    [commandBuffer commit];
+    [commandBuffer waitUntilCompleted];
 }
 
 - (void)swapTextures:(id<MTLTexture> *)a with:(id<MTLTexture> *)b {
@@ -253,37 +272,88 @@
 }
 
 - (void)reset:(id<MTLCommandQueue>)commandQueue {
-    [self clearTextures:commandQueue];
+    [self computePass:^(id<MTLComputeCommandEncoder> enc) {
+        // Clear everything
+        [self dispatch:enc
+              pipeline:_clearTexturesPipeline
+                  grid:MTLSizeMake(_width + 1, _height + 1, 1)
+              textures:@[_velX, _velXTemp, _velY, _velYTemp, _pressure, _smoke, _smokeTemp, _solids, _pressureSolveData]
+               buffers:@[_simConstantsBuffer]];
+
+        // Restore smoke from _smokeInitial using simple_copy (no flip)
+        [enc setComputePipelineState:_copyTexturePipeline];
+        MTLSize gridSize = MTLSizeMake(_smoke.width, _smoke.height, 1);
+        MTLSize threadgroupSize = MTLSizeMake(16, 16, 1);
+        
+        [enc setTexture:_smokeInitial atIndex:0];
+        [enc setTexture:_smoke atIndex:1];
+        [enc dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
+        
+        [enc setTexture:_smokeTemp atIndex:1];
+        [enc dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
+    }];
+
+    [self initializeSolids:commandQueue];
 }
 
 - (void)initializeSolids:(id<MTLCommandQueue>)commandQueue {
-    id<MTLCommandBuffer> cmd = [commandQueue commandBuffer];
-    id<MTLComputeCommandEncoder> enc = [cmd computeCommandEncoder];
-
-    [self dispatch:enc
-          pipeline:_initSolidsPipeline
-              grid:MTLSizeMake(_width, _height, 1)
-          textures:@[_solids]
-           buffers:@[_simConstantsBuffer]];
-
-    [enc endEncoding];
-    [cmd commit];
-    [cmd waitUntilCompleted];
+    [self computePass:^(id<MTLComputeCommandEncoder> enc) {
+        [self dispatch:enc
+              pipeline:_initSolidsPipeline
+                  grid:MTLSizeMake(_width, _height, 1)
+              textures:@[_solids]
+               buffers:@[_simConstantsBuffer]];
+    }];
 }
 
 - (void)clearTextures:(id<MTLCommandQueue>)commandQueue {
-    id<MTLCommandBuffer> cmd = [commandQueue commandBuffer];
-    id<MTLComputeCommandEncoder> enc = [cmd computeCommandEncoder];
+    [self computePass:^(id<MTLComputeCommandEncoder> enc) {
+        [self dispatch:enc
+              pipeline:_clearTexturesPipeline
+                  grid:MTLSizeMake(_width + 1, _height + 1, 1)
+              textures:@[_velX, _velXTemp, _velY, _velYTemp, _pressure, _smoke, _smokeTemp, _solids, _pressureSolveData]
+               buffers:@[_simConstantsBuffer]];
+    }];
+}
 
-    [self dispatch:enc
-          pipeline:_clearTexturesPipeline
-              grid:MTLSizeMake(_width + 1, _height + 1, 1)
-          textures:@[_velX, _velXTemp, _velY, _velYTemp, _pressure, _smoke, _smokeTemp, _solids, _pressureSolveData]
-           buffers:@[_simConstantsBuffer]];
+- (void)setSmokeImage:(NSImage *)image {
+    if (!image) return;
 
-    [enc endEncoding];
-    [cmd commit];
-    [cmd waitUntilCompleted];
+    NSError *error = nil;
+    MTKTextureLoader *loader = [[MTKTextureLoader alloc] initWithDevice:_device];
+    
+    NSDictionary *options = @{
+        MTKTextureLoaderOptionSRGB: @NO,
+        MTKTextureLoaderOptionTextureUsage: @(MTLTextureUsageShaderRead)
+    };
+
+    CGImageRef cgImage = [image CGImageForProposedRect:NULL context:NULL hints:NULL];
+    id<MTLTexture> tempTexture = [loader newTextureWithCGImage:cgImage options:options error:&error];
+
+    if (error || !tempTexture) {
+        NSLog(@"Failed to load image texture: %@", error);
+        return;
+    }
+
+    [self computePass:^(id<MTLComputeCommandEncoder> encoder) {
+        [encoder setComputePipelineState:_scaleTexturePipeline];
+        
+        MTLSize gridSize = MTLSizeMake(_smoke.width, _smoke.height, 1);
+        MTLSize threadgroupSize = MTLSizeMake(16, 16, 1);
+
+        // Scale into _smoke
+        [encoder setTexture:tempTexture atIndex:0];
+        [encoder setTexture:_smoke atIndex:1];
+        [encoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
+        
+        // Scale into _smokeTemp
+        [encoder setTexture:_smokeTemp atIndex:1];
+        [encoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
+        
+        // Scale into _smokeInitial
+        [encoder setTexture:_smokeInitial atIndex:1];
+        [encoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
+    }];
 }
 
 - (id<MTLTexture>)smokeTexture {

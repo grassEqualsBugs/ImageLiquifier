@@ -8,15 +8,42 @@
 #import <simd/simd.h>
 
 @implementation SimView
+- (instancetype)initWithFrame:(CGRect)frame device:(id<MTLDevice>)device {
+    self = [super initWithFrame:frame device:device];
+    if (self) {
+        [self registerForDraggedTypes:@[NSPasteboardTypeFileURL]];
+    }
+    return self;
+}
+
 - (BOOL)acceptsFirstResponder { return YES; }
+
+- (NSDragOperation)draggingEntered:(id<NSDraggingInfo>)sender {
+    return NSDragOperationCopy;
+}
+
+- (BOOL)performDragOperation:(id<NSDraggingInfo>)sender {
+    NSPasteboard *pboard = [sender draggingPasteboard];
+    if ([[pboard types] containsObject:NSPasteboardTypeFileURL]) {
+        NSArray *urls = [pboard readObjectsForClasses:@[[NSURL class]] options:nil];
+        if (urls.count > 0) {
+            NSURL *url = urls[0];
+            NSImage *image = [[NSImage alloc] initWithContentsOfURL:url];
+            if (image) {
+                if ([self.delegate respondsToSelector:@selector(handleDroppedImage:)]) {
+                    [(Renderer *)self.delegate handleDroppedImage:image];
+                    return YES;
+                }
+            }
+        }
+    }
+    return NO;
+}
 
 - (void)mouseDown:(NSEvent *)e         { [(id<InputHandler>)self.delegate mouseDown:e]; }
 - (void)mouseUp:(NSEvent *)e           { [(id<InputHandler>)self.delegate mouseUp:e]; }
 - (void)mouseMoved:(NSEvent *)e        { [(id<InputHandler>)self.delegate mouseMoved:e]; }
 - (void)mouseDragged:(NSEvent *)e      { [(id<InputHandler>)self.delegate mouseDragged:e]; }
-- (void)rightMouseDown:(NSEvent *)e    { [(id<InputHandler>)self.delegate rightMouseDown:e]; }
-- (void)rightMouseUp:(NSEvent *)e      { [(id<InputHandler>)self.delegate rightMouseUp:e]; }
-- (void)rightMouseDragged:(NSEvent *)e { [(id<InputHandler>)self.delegate rightMouseDragged:e]; }
 - (void)scrollWheel:(NSEvent *)e       { [(id<InputHandler>)self.delegate scrollWheel:e]; }
 - (void)keyDown:(NSEvent *)e           { [(id<InputHandler>)self.delegate keyDown:e]; }
 - (void)keyUp:(NSEvent *)e             { [(id<InputHandler>)self.delegate keyUp:e]; }
@@ -29,7 +56,6 @@
     simd_float2   _lastMousePos;
     bool          _firstFrameMouse;
     bool          _leftDown;
-    bool          _rightDown;
     bool          _isSolidMode;
     bool          _paused;
 
@@ -113,23 +139,12 @@
 - (void)mouseDragged:(NSEvent *)event {
     [self updateMousePos:event];
 }
-- (void)rightMouseDragged:(NSEvent *)event {
-    [self updateMousePos:event];
-}
 - (void)mouseDown:(NSEvent *)event {
     _leftDown = true;
     [self updateMousePos:event];
 }
 - (void)mouseUp:(NSEvent *)event {
     _leftDown = false;
-    [self updateMousePos:event];
-}
-- (void)rightMouseDown:(NSEvent *)event {
-    _rightDown = true;
-    [self updateMousePos:event];
-}
-- (void)rightMouseUp:(NSEvent *)event {
-    _rightDown = false;
     [self updateMousePos:event];
 }
 
@@ -162,6 +177,10 @@
     }
 }
 
+- (void)handleDroppedImage:(NSImage *)image {
+    [_sim setSmokeImage:image];
+}
+
 // drawInMTKView method -- render loop for the program, called every frame
 - (void)drawInMTKView:(MTKView *)view {
     NSTimeInterval currentTime = CACurrentMediaTime();
@@ -186,7 +205,6 @@
     frameData->mouse.pos = _mousePos;
     frameData->mouse.delta = _mousePos - _lastMousePos;
     frameData->mouse.leftDown = _leftDown;
-    frameData->mouse.rightDown = _rightDown;
     frameData->mouse.isSolidMode = _isSolidMode;
     frameData->mouse.isPaused = _paused;
 
