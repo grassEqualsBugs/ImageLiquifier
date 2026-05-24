@@ -6,7 +6,7 @@ SRC_DIR = src
 OBJ_DIR = obj
 BIN_DIR = bin
 
-TARGET = $(BIN_DIR)/smoke_gpu
+TARGET = $(BIN_DIR)/liquifier
 SOURCES = $(wildcard $(SRC_DIR)/*.mm)
 OBJECTS = $(SOURCES:$(SRC_DIR)/%.mm=$(OBJ_DIR)/%.o)
 
