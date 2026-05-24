@@ -1,6 +1,6 @@
 # Image Liquifier
 
-Drag and drop your favorite images and watch as it is converted into a fluid/smoke which you can play around with!
+Drag and drop your favorite images and watch as they are converted into a fluid/smoke which you can play around with!
 
 ## Build and Run
 ```bash
@@ -9,6 +9,7 @@ make
 ```
 
 ## Controls
+- **First, drag and drop any image of your choosing into the window.** Then:
 - **Left Click**: Drag to apply velocity to the fluid.
 - **Scroll Wheel**: Adjust brush radius.
 - **Space**: Pause/Resume the movement of fluid.

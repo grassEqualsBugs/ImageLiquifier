@@ -75,46 +75,6 @@ vertex VertexOut vertex_main(uint vertexID [[vertex_id]]) {
     return out;
 }
 
-fragment float4 fragment_speed(
-    VertexOut in [[stage_in]],
-    texture2d<float> velX  [[texture(0)]],
-    texture2d<float> velY  [[texture(1)]],
-    texture2d<uint>  solids [[texture(2)]],
-    constant SimConstants& constants [[buffer(0)]],
-    constant FrameData&    frame     [[buffer(1)]])
-{
-    uint2 pixelCoord = uint2(in.uv * float2(constants.width, constants.height));
-    uint isSolid = solids.read(pixelCoord).r;
-    float4 baseColor;
-
-    if (isSolid == 1) {
-        baseColor = float4(0.3, 0.1, 0.4, 1.0);
-    } else {
-        constexpr sampler s(filter::linear);
-        float u = velX.sample(s, in.uv).r;
-        float v = velY.sample(s, in.uv).r;
-        float speed = length(float2(u, v));
-
-        float speedVisMax = 0.25f;
-        float speedT = min(speed / speedVisMax, 1.0f);
-        float hue = (1.0f - speedT) * (218.0f / 360.0f) + speedT * (10.0f / 360.0f);
-
-        float3 rgb = hsv2rgb(float3(hue, 0.7, 0.8));
-        baseColor = float4(rgb, 1.0);
-    }
-
-    float2 mouse_uv_c = c_uv(frame.mouse.pos, constants);
-    float2 uv_c = c_uv(in.uv, constants);
-    float d = distance(uv_c, mouse_uv_c);
-    if (abs(d - constants.mouseRadius) < 0.0005) {
-	   	if (frame.mouse.isSolidMode) {
-	    	return float4(0.3, 0.1, 0.4, 1.0);
-	   	}
-        return float4(0.5, 1.0, 0.5, 1.0);
-    }
-    return baseColor;
-}
-
 fragment float4 fragment_smoke(
 	VertexOut in [[stage_in]],
 	texture2d<float> texture [[texture(0)]],
@@ -127,7 +87,7 @@ fragment float4 fragment_smoke(
     float4 baseColor;
 
     if (isSolid == 1) {
-        baseColor = float4(0.3, 0.1, 0.4, 1.0);
+        baseColor = float4(0.1, 0.1, 0.1, 1.0);
     } else {
         constexpr sampler s(filter::linear);
         baseColor = texture.sample(s, in.uv);
@@ -138,45 +98,8 @@ fragment float4 fragment_smoke(
     float d = distance(uv_c, mouse_uv_c);
     if (abs(d - constants.mouseRadius) < 0.0005) {
 	   	if (frame.mouse.isSolidMode) {
-	    	return float4(0.3, 0.1, 0.4, 1.0);
+	    	return float4(0.1, 0.1, 0.1, 1.0);
 	   	}
-        return float4(0.5, 1.0, 0.5, 1.0);
-    }
-    return baseColor;
-}
-
-fragment float4 fragment_divergence(
-    VertexOut in [[stage_in]],
-    texture2d<float> texture       [[texture(0)]],
-    texture2d<uint>  solids        [[texture(1)]],
-    constant SimConstants& constants [[buffer(0)]],
-    constant FrameData&    frame     [[buffer(1)]])
-{
-    uint2 pixelCoord = uint2(in.uv * float2(constants.width, constants.height));
-    uint isSolid = solids.read(pixelCoord).r;
-    float4 baseColor;
-
-    if (isSolid == 1) {
-        baseColor = float4(0.3, 0.1, 0.4, 1.0);
-    } else {
-        constexpr sampler s(filter::linear);
-        float4 sampled = texture.sample(s, in.uv);
-        float div = sampled.r;
-        float divergenceColorRange = 0.8f;
-        float t = min(abs(div) / divergenceColorRange, 1.0f);
-        float4 bg = float4(float3(0.12), 1.0);
-        float4 target = (div < 0) ? float4(0.96, 0.26, 0.26, 1.0)
-                                : float4(0.26, 0.53, 0.96, 1.0);
-        baseColor = mix(bg, target, t);
-    }
-
-    float2 mouse_uv_c = c_uv(frame.mouse.pos, constants);
-    float2 uv_c = c_uv(in.uv, constants);
-    float d = distance(uv_c, mouse_uv_c);
-    if (abs(d - constants.mouseRadius) < 0.0005) {
-    	if (frame.mouse.isSolidMode) {
-     		return float4(0.3, 0.1, 0.4, 1.0);
-    	}
         return float4(0.5, 1.0, 0.5, 1.0);
     }
     return baseColor;
@@ -214,11 +137,6 @@ kernel void inject_velocity(
     constant FrameData&    frame     [[buffer(1)]],
     uint2 gid [[thread_position_in_grid]])
 {
-	// left side wind
-    if (frame.mouse.windOn) {
-        if (gid.x == 0) velX.write(float4(0.2, 0, 0, 0), gid);
-    }
-
     if (!frame.mouse.leftDown || frame.mouse.isSolidMode) return;
 
     float2 mouse_uv_c = c_uv(frame.mouse.pos, constants);
@@ -253,14 +171,6 @@ kernel void inject_smoke(
     constant FrameData&    frame     [[buffer(1)]],
     uint2 gid [[thread_position_in_grid]])
 {
-	// constant source of smoke from left side
-    if (frame.mouse.windOn) {
-    	float2 uv = float2(
-        	gid.x / (float)constants.width,
-        	(gid.y) / (float)constants.height);
-        if (0.45 < uv.y && uv.y < 0.55 && uv.x < 0.04) smoke.write(float4(1), gid);
-    }
-
     if (!frame.mouse.rightDown || frame.mouse.isSolidMode) return;
     if (!in_bounds(gid, constants)) return;
 
@@ -484,25 +394,6 @@ kernel void update_velocities(
     }
 }
 
-kernel void update_divergence(
-	texture2d<float, access::read>  velX       [[texture(0)]],
-    texture2d<float, access::read>  velY       [[texture(1)]],
-    texture2d<float, access::write> divergence [[texture(2)]],
-    texture2d<uint,  access::read>    solids   [[texture(3)]],
-    constant SimConstants& constants [[buffer(0)]],
-    uint2 gid [[thread_position_in_grid]])
-{
-	if (!in_bounds(gid, constants)) return;
-	if (solids.read(gid).r == 1) {
-		divergence.write(float4(0), gid);
-		return;
-	}
-	float du = velX.read(gxp1(gid)).r - velX.read(gid).r;
-	float dv = velY.read(gyp1(gid)).r - velY.read(gid).r;
-	float div = (du + dv) / constants.cellSize;
-	divergence.write(float4(div), gid);
-}
-
 kernel void init_solids(
     texture2d<uint, access::write> solids [[texture(0)]],
     constant SimConstants& constants      [[buffer(0)]],
@@ -522,9 +413,8 @@ kernel void clear_textures(
     texture2d<float, access::write> pressure   [[texture(4)]],
     texture2d<float, access::write> smoke      [[texture(5)]],
     texture2d<float, access::write> smokeTemp  [[texture(6)]],
-    texture2d<float, access::write> divergence [[texture(7)]],
-    texture2d<uint,  access::write> solids     [[texture(8)]],
-    texture2d<float, access::write> pressureSolveData [[texture(9)]],
+    texture2d<uint,  access::write> solids     [[texture(7)]],
+    texture2d<float, access::write> pressureSolveData [[texture(8)]],
     constant SimConstants& constants      [[buffer(0)]],
     uint2 gid [[thread_position_in_grid]])
 {
@@ -540,7 +430,6 @@ kernel void clear_textures(
     	pressure.write(float4(0), gid);
     	smoke.write(float4(0), gid);
      	smokeTemp.write(float4(0), gid);
-      	divergence.write(float4(0), gid);
         pressureSolveData.write(float4(0), gid);
 
         bool isBorder = gid.x == 0 || gid.x == (uint)constants.width - 1

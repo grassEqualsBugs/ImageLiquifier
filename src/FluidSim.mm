@@ -14,7 +14,6 @@
     id<MTLTexture> _smoke; // smokeMap analog from CPU version
     id<MTLTexture> _smokeTemp;
     id<MTLTexture> _solids;
-    id<MTLTexture> _divergence;
     id<MTLTexture> _pressureSolveData;
 
     // compute pipelines (one needed for each kernel)
@@ -27,7 +26,6 @@
     id<MTLComputePipelineState> _clearTexturesPipeline;
     id<MTLComputePipelineState> _initSolidsPipeline;
     id<MTLComputePipelineState> _updateVelocitiesPipeline;
-    id<MTLComputePipelineState> _updateDivergencePipeline;
     id<MTLComputePipelineState> _precomputePressureDataPipeline;
     // red black Gauss-Seidel
     id<MTLComputePipelineState> _gsRedPipeline;
@@ -80,7 +78,6 @@
     _velY        = [self makeTextureWidth:_width     height:_height + 1];
     _velYTemp    = [self makeTextureWidth:_width     height:_height + 1];
     _pressure    = [self makeTextureWidth:_width     height:_height];
-    _divergence  = [self makeTextureWidth:_width     height:_height];
 
     // smoke textures use RGBA32Float
     MTLTextureDescriptor *smokeDesc =
@@ -133,7 +130,6 @@
     _gsRedPipeline            = [self makePipeline:library name:@"gs_red"];
     _gsBlackPipeline          = [self makePipeline:library name:@"gs_black"];
     _updateVelocitiesPipeline = [self makePipeline:library name:@"update_velocities"];
-    _updateDivergencePipeline = [self makePipeline:library name:@"update_divergence"];
     _precomputePressureDataPipeline = [self makePipeline:library name:@"precompute_pressure_data"];
     _clearTexturesPipeline    = [self makePipeline:library name:@"clear_textures"];
     _initSolidsPipeline       = [self makePipeline:library name:@"init_solids"];
@@ -254,13 +250,6 @@
               grid:MTLSizeMake(_width + 1, _height + 1, 1)
           textures:@[ _velX, _velY, _pressure, _solids ]
            buffers:@[ _simConstantsBuffer ]];
-
-    // update divergence texture
-    [self dispatch:encoder
-            pipeline:_updateDivergencePipeline
-                grid:grid
-            textures:@[_velX, _velY, _divergence, _solids]
-            buffers:@[_simConstantsBuffer]];
 }
 
 - (void)reset:(id<MTLCommandQueue>)commandQueue {
@@ -289,7 +278,7 @@
     [self dispatch:enc
           pipeline:_clearTexturesPipeline
               grid:MTLSizeMake(_width + 1, _height + 1, 1)
-          textures:@[_velX, _velXTemp, _velY, _velYTemp, _pressure, _smoke, _smokeTemp, _divergence, _solids, _pressureSolveData]
+          textures:@[_velX, _velXTemp, _velY, _velYTemp, _pressure, _smoke, _smokeTemp, _solids, _pressureSolveData]
            buffers:@[_simConstantsBuffer]];
 
     [enc endEncoding];
@@ -299,18 +288,6 @@
 
 - (id<MTLTexture>)smokeTexture {
     return _smoke;
-}
-
-- (id<MTLTexture>)velXTexture {
-    return _velX;
-}
-
-- (id<MTLTexture>)velYTexture {
-    return _velY;
-}
-
-- (id<MTLTexture>)divergenceTexture {
-    return _divergence;
 }
 
 - (id<MTLTexture>)solidsTexture {

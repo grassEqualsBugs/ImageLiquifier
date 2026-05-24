@@ -14,7 +14,7 @@ int main(int argc, const char *argv[]) {
                                                NSWindowStyleMaskClosable)
                                       backing:NSBackingStoreBuffered // back and front buffer rendering scheme
                                         defer:NO]; // creates the window immediately
-    [window setTitle:@"Smoke Simulation"];
+    [window setTitle:@"Image Liquifier (drag and drop image into window!)"];
     [window makeKeyAndOrderFront:nil];
     [window center];
 
