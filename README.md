@@ -1,6 +1,6 @@
 # Image Liquifier
 
-Drag and drop your favorite images and watch as they are converted into a fluid/smoke which you can play around with!
+Drag and drop your favorite images and watch as they are converted into a fluid/smoke which you can play around with! An application of the smoke/fluid simulation I wrote (separate [repo](https://github.com/grassEqualsBugs/SmokeSimulation)).
 
 ## Build and Run
 ```bash
@@ -9,7 +9,9 @@ make
 ```
 
 ## Controls
-- **First, drag and drop any image of your choosing into the window.** Then:
+- **First, drag and drop any image of your choosing into the window.**
+- Supposed file types are png, jpg, jpeg, and webp.
+- Then:
 - **Left Click**: Drag to apply velocity to the fluid.
 - **Scroll Wheel**: Adjust brush radius.
 - **Space**: Pause/Resume the movement of fluid.
@@ -18,4 +20,4 @@ make
 ---
 
 ## Technical Details
-The  fluid and smoke simulation engine to create this is programmed entirely from scratch. The repo for just that part of the project is [here](https://github.com/grassEqualsBugs/SmokeSimulation), where you can learn more about the technical details.
+See the original repo with the base engine, linked [here](https://github.com/grassEqualsBugs/SmokeSimulation), to learn more about the technical details.
