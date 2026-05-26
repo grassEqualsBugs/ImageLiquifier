@@ -255,7 +255,7 @@ kernel void advect_velX(
     float2 dt_uv = constants.deltaTime * vel / (float2(constants.width, constants.height) * constants.cellSize);
     float2 prev_uv = uv - dt_uv;
 
-    float val = velX.sample(linearSampler, prev_uv).r;
+    float val = velX.sample(linearSampler, prev_uv).r * constants.velDamping;
     velXTemp.write(float4(val, 0, 0, 0), gid);
 }
 
@@ -279,7 +279,7 @@ kernel void advect_velY(
     float2 dt_uv = constants.deltaTime * vel / (float2(constants.width, constants.height) * constants.cellSize);
     float2 prev_uv = uv - dt_uv;
 
-    float val = velY.sample(linearSampler, prev_uv).r;
+    float val = velY.sample(linearSampler, prev_uv).r * constants.velDamping;
     velYTemp.write(float4(val, 0, 0, 0), gid);
 }
 

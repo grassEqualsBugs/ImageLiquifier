@@ -18,6 +18,7 @@ typedef struct {
     int height;
     float mouseRadius;
     float velocityStrength;
+    float velDamping;
     float weightSOR;
 } SimConstants;
 

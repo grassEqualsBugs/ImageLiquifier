@@ -72,7 +72,6 @@
 
 	FluidSim*                   _sim;
 }
-
 // Constructor (initialization of renderer)
 - (instancetype)initWithMetalKitView:(MTKView *)view {
   	self = [super init];
@@ -80,7 +79,7 @@
 
     _width = 1600;
     _height = 900;
-    float simScale = 2.8f;
+    float simScale = 1.5f;
     int simWidth = _width / simScale;
     int simHeight = _height / simScale;
 

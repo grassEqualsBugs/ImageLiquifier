@@ -148,11 +148,12 @@
     SimConstants c;
     c.cellSize     = 1.f / fmin(_width, _height);
     c.deltaTime    = 1.f / 30.f;
-    c.fluidDensity = 1.f;
+    c.fluidDensity = 0.3f;
     c.width        = _width;
     c.height       = _height;
     c.mouseRadius = 0.03f;
     c.velocityStrength = 1.8f;
+    c.velDamping = 0.98;
     c.weightSOR = 1.7f;
     _simConstantsBuffer = [_device newBufferWithBytes:&c
                                                length:sizeof(SimConstants)
@@ -250,7 +251,7 @@
            buffers:@[_simConstantsBuffer]];
 
     // pressure solve
-    for (int i = 0; i < 700; i++) {
+    for (int i = 0; i < 80; i++) {
         [self dispatch:encoder
               pipeline:_gsRedPipeline
                   grid:grid
@@ -284,11 +285,11 @@
         [enc setComputePipelineState:_copyTexturePipeline];
         MTLSize gridSize = MTLSizeMake(_smoke.width, _smoke.height, 1);
         MTLSize threadgroupSize = MTLSizeMake(16, 16, 1);
-        
+
         [enc setTexture:_smokeInitial atIndex:0];
         [enc setTexture:_smoke atIndex:1];
         [enc dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
-        
+
         [enc setTexture:_smokeTemp atIndex:1];
         [enc dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
     }];
@@ -321,7 +322,7 @@
 
     NSError *error = nil;
     MTKTextureLoader *loader = [[MTKTextureLoader alloc] initWithDevice:_device];
-    
+
     NSDictionary *options = @{
         MTKTextureLoaderOptionSRGB: @NO,
         MTKTextureLoaderOptionTextureUsage: @(MTLTextureUsageShaderRead)
@@ -337,7 +338,7 @@
 
     [self computePass:^(id<MTLComputeCommandEncoder> encoder) {
         [encoder setComputePipelineState:_scaleTexturePipeline];
-        
+
         MTLSize gridSize = MTLSizeMake(_smoke.width, _smoke.height, 1);
         MTLSize threadgroupSize = MTLSizeMake(16, 16, 1);
 
@@ -345,11 +346,11 @@
         [encoder setTexture:tempTexture atIndex:0];
         [encoder setTexture:_smoke atIndex:1];
         [encoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
-        
+
         // Scale into _smokeTemp
         [encoder setTexture:_smokeTemp atIndex:1];
         [encoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
-        
+
         // Scale into _smokeInitial
         [encoder setTexture:_smokeInitial atIndex:1];
         [encoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
