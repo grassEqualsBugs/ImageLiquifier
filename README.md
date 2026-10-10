@@ -10,7 +10,7 @@ make
 
 ## Controls
 - **First, drag and drop any image of your choosing into the window.**
-- Supposed file types are png, jpg, jpeg, and webp.
+- Supported file types are png, jpg, jpeg, and webp.
 - Then:
 - **Left Click**: Drag to apply velocity to the fluid.
 - **Scroll Wheel**: Adjust brush radius.
