@@ -1,6 +1,6 @@
 # Image Liquifier
 
-Drag and drop your favorite images and watch as they are converted into a fluid/smoke which you can play around with! An application of the smoke/fluid simulation I wrote (separate [repo](https://github.com/grassEqualsBugs/SmokeSimulation)).
+Drag and drop your favorite images and watch as they are converted into a fluid/smoke which you can play around with! An application of the Navier-Stokes equation solver I wrote (separate [repo](https://github.com/grassEqualsBugs/SmokeSimulation)).
 
 ## Build and Run
 ```bash
@@ -17,7 +17,6 @@ make
 - **Space**: Pause/Resume the movement of fluid.
 - **R**: Reset the image.
 
----
+## Copyright
 
-## Technical Details
-See the original repo with the base engine, linked [here](https://github.com/grassEqualsBugs/SmokeSimulation), to learn more about the technical details.
+© 2026 Ethan Printz. All rights reserved.
